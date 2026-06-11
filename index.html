@@ -29,7 +29,6 @@
       <div class="export-btns">
         <button class="btn btn-small btn-md" onclick="exportActivities('md')" title="Exportar como Markdown">⬇ .md</button>
         <button class="btn btn-small btn-txt" onclick="exportActivities('txt')" title="Exportar como texto plano">⬇ .txt</button>
-        <button class="btn btn-small btn-secondary" onclick="toggleAudioSettings()" title="Configuración de sonido">⚙️</button>
       </div>
     </div>
     <div class="activity-list" id="activityList">
@@ -38,6 +37,12 @@
         <p>Aún no hay actividades. Crea una abajo.</p>
       </div>
     </div>
+
+    <div class="sidebar-footer">
+      <button class="btn btn-small btn-danger" onclick="clearAllActivities()">🗑️ Limpiar</button>
+      <button class="btn btn-small btn-secondary" onclick="toggleAudioSettings()">⚙️ Ajustes</button>
+    </div>
+    
   </aside>
 
   <!-- MAIN -->

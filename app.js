@@ -1,4 +1,3 @@
-
 // ── SERVICE WORKER REGISTRATION ────────────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -16,6 +15,26 @@ let remaining  = 0;
 let totalSecs  = 0;
 let running    = false;
 let timerID    = null;
+let expectedEndTime = null;
+
+// ── PERSISTENCE ENGINE ─────────────────────────────────
+function saveActivities() {
+  localStorage.setItem('pomo_activities', JSON.stringify(activities));
+}
+
+function loadActivities() {
+  const saved = localStorage.getItem('pomo_activities');
+  if (saved) {
+    try {
+      activities = JSON.parse(saved);
+    } catch (e) {
+      console.error("Error al leer los datos locales", e);
+      activities = [];
+    }
+  } else {
+    activities = [];
+  }
+}
 
 // ── AUDIO ENGINE (NIVEL EXPERTO) ───────────────────────
 const AudioEngine = {
@@ -146,6 +165,7 @@ function createActivity() {
 
   const total = tasks.reduce((s, t) => s + t.mins, 0);
   activities.push({ id: Date.now(), name, tasks, total });
+  saveActivities();
   renderSidebar();
 
   document.getElementById('actName').value = '';
@@ -243,6 +263,8 @@ function playPause() {
   updateProgressSteps();
 
   if (running) {
+    // Definir la marca de tiempo exacta en el futuro usando el reloj del sistema
+    expectedEndTime = Date.now() + (remaining * 1000);
     timerID = setInterval(tick, 1000);
   } else {
     clearInterval(timerID);
@@ -250,7 +272,11 @@ function playPause() {
 }
 
 function tick() {
-  remaining--;
+  const now = Date.now();
+  remaining = Math.round((expectedEndTime - now) / 1000);
+  
+  if (remaining < 0) remaining = 0; // Evitar desbordes negativos
+  
   updateRing(remaining, totalSecs);
 
   if (remaining <= 0) {
@@ -350,6 +376,7 @@ function deleteActivity(idx) {
   if (!confirm(`¿Borrar "${activities[idx].name}"?`)) return;
   stopTimer();
   activities.splice(idx, 1);
+  saveActivities();
 
   if (activeIdx === idx) {
     activeIdx = null;
@@ -359,6 +386,36 @@ function deleteActivity(idx) {
     activeIdx--;
   }
   renderSidebar();
+}
+// ── DELETE ALL (SISTEMA DE SEGURIDAD) ──────────────────
+function clearAllActivities() {
+  if (!activities.length) {
+    alert('No hay actividades registradas en el historial.');
+    return;
+  }
+
+  // Interceptación de seguridad Nivel 1: Ofrecer respaldo
+  const wantsBackup = confirm('¿Deseas descargar un respaldo antes de eliminar todo el historial?\n\n[Aceptar] = Descargar respaldo y borrar\n[Cancelar] = Borrar sin respaldo');
+
+  if (wantsBackup) {
+    // Opción B: Exportar y borrar
+    exportActivities('md');
+  } else {
+    // Interceptación de seguridad Nivel 2: Confirmación destructiva
+    const confirmDelete = confirm('⚠️ ALERTA DE PÉRDIDA DE DATOS\nEstás a punto de eliminar permanentemente todas las actividades sin respaldo.\n\n¿Estás absolutamente seguro?');
+    if (!confirmDelete) return; // Abortar operación
+  }
+
+  // Ejecución de limpieza absoluta
+  stopTimer();
+  activities = [];
+  activeIdx = null;
+  saveActivities(); // Guardar el arreglo vacío en LocalStorage
+  renderSidebar();
+  
+  // Reiniciar estado visual del panel principal
+  document.getElementById('timerActive').style.display = 'none';
+  document.getElementById('timerEmpty').style.display  = 'flex';
 }
 
 // ── EXPORT ─────────────────────────────────────────────
@@ -499,6 +556,7 @@ function saveActivityEdit() {
   act.name = name;
   act.tasks = tasks;
   act.total = total;
+  saveActivities();
 
   // Actualización de la interfaz
   renderSidebar();
@@ -588,44 +646,8 @@ function handleFileUpload(event) {
   reader.readAsDataURL(file);
 }
 
-// ── DEMO DATA ──────────────────────────────────────────
-(function loadExamples() {
-  activities = [
-    {
-      id: 1,
-      name: 'Aseo del cuarto',
-      tasks: [
-        { label: 'Tender la cama',  mins: 8,  rest: false },
-        { label: 'Ordenar y barrer', mins: 17, rest: false },
-        { label: 'Descanso',         mins: 5,  rest: true  },
-      ],
-      total: 30
-    },
-    {
-      id: 2,
-      name: 'Estudiar Docker',
-      tasks: [
-        { label: 'Estudio',  mins: 50, rest: false },
-        { label: 'Descanso', mins: 10, rest: true  },
-      ],
-      total: 60
-    }
-  ];
-
-  addTaskRow(false);
-  addTaskRow(false);
-  addTaskRow(true);
-
-  const rows = document.querySelectorAll('#taskRows .task-row');
-  if (rows[0]) {
-    rows[0].querySelector('input[type="text"]').value   = 'Tender la cama';
-    rows[0].querySelector('input[type="number"]').value = '8';
-  }
-  if (rows[1]) {
-    rows[1].querySelector('input[type="text"]').value   = 'Ordenar y barrer';
-    rows[1].querySelector('input[type="number"]').value = '17';
-  }
-  document.getElementById('actName').value = 'Aseo del cuarto';
-  updateTotal();
+// ── INICIALIZACIÓN ─────────────────────────────────────
+(function initApp() {
+  loadActivities();
   renderSidebar();
 })();
