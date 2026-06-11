@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planificador Pomodoro</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="theme-color" content="#f5a623">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg:      #0e1117;
+    --surface: #161b27;
+    --card:    #1e2535;
+    --border:  #2a3347;
+    --accent:  #f5a623;
+    --accent2: #e05c5c;
+    --rest:    #4fc3a1;
+    --text:    #e8eaf0;
+    --muted:   #7a8499;
+    --radius:  14px;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; display:flex; flex-direction:column; }
+
+  /* HEADER */
+  header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 28px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  .logo { font-size:1.2rem; font-weight:700; letter-spacing:-0.5px; }
+  .logo span { color:var(--accent); }
+  .datetime { text-align:right; }
+  .datetime .time { font-size:1.6rem; font-weight:700; letter-spacing:2px; color:var(--accent); }
+  .datetime .date { font-size:0.78rem; color:var(--muted); margin-top:2px; text-transform:capitalize; }
+
+  /* LAYOUT */
+  .app { display:flex; flex:1; min-height:0; }
+
+  /* SIDEBAR */
+  .sidebar { width:340px; min-width:280px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+  .sidebar-header { padding:20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .sidebar-header h2 { font-size:0.9rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+  .export-btns { display:flex; gap:6px; flex-shrink:0; }
+
+  .activity-list { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+  .activity-list::-webkit-scrollbar { width:4px; }
+  .activity-list::-webkit-scrollbar-track { background:transparent; }
+  .activity-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+  .activity-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; transition:border-color .2s; }
+  .activity-card:hover { border-color:var(--accent); }
+  .activity-card.active { border-color:var(--accent); }
+
+  .activity-card-head { padding:12px 14px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .activity-card-head .name { font-size:0.92rem; font-weight:600; cursor:pointer; flex:1; }
+  .activity-card-head .total { font-size:0.75rem; color:var(--accent); background:rgba(245,166,35,.12); border-radius:20px; padding:2px 8px; white-space:nowrap; flex-shrink:0; }
+  .delete-btn { background:none; border:none; cursor:pointer; color:var(--muted); font-size:0.85rem; padding:2px 6px; border-radius:6px; transition:color .15s, background .15s; flex-shrink:0; line-height:1; }
+  .delete-btn:hover { color:var(--accent2); background:rgba(224,92,92,.12); }
+
+  .activity-card-tasks { padding:0 14px 10px; display:flex; flex-direction:column; gap:4px; cursor:pointer; }
+  .task-pill { display:flex; justify-content:space-between; align-items:center; font-size:0.78rem; color:var(--muted); padding:3px 0; border-top:1px solid var(--border); }
+  .task-pill.is-rest { color:var(--rest); }
+  .task-pill .pill-min { font-weight:600; }
+
+  /* MAIN */
+  .main { flex:1; display:flex; flex-direction:column; overflow-y:auto; padding:28px; gap:24px; }
+
+  /* TIMER PANEL */
+  .timer-panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:28px; display:flex; flex-direction:column; align-items:center; gap:18px; }
+  .timer-panel .act-title { font-size:1.1rem; font-weight:700; }
+  .timer-panel .task-name { font-size:0.88rem; color:var(--muted); }
+
+  .ring-wrap { position:relative; width:180px; height:180px; }
+  .ring-wrap svg { transform:rotate(-90deg); }
+  .ring-bg { fill:none; stroke:var(--border); stroke-width:10; }
+  .ring-fg { fill:none; stroke-width:10; stroke-linecap:round; transition:stroke-dashoffset .5s linear, stroke .4s; }
+  .ring-text { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+  .ring-text .t-time { font-size:2.4rem; font-weight:700; letter-spacing:2px; }
+  .ring-text .t-label { font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+
+  .timer-controls { display:flex; gap:10px; }
+  .btn { border:none; cursor:pointer; border-radius:10px; font-size:0.88rem; font-weight:600; padding:10px 22px; transition:opacity .15s, transform .1s; }
+  .btn:hover { opacity:.85; }
+  .btn:active { transform:scale(.96); }
+  .btn:disabled { opacity:.35; cursor:not-allowed; }
+  .btn-primary { background:var(--accent); color:#000; }
+  .btn-secondary { background:var(--card); color:var(--text); border:1px solid var(--border); }
+  .btn-danger { background:var(--accent2); color:#fff; }
+  .btn-small { padding:6px 14px; font-size:0.8rem; }
+  .btn-md { background:rgba(79,195,161,.15); color:var(--rest); border:1px solid rgba(79,195,161,.3); }
+  .btn-txt { background:var(--card); color:var(--muted); border:1px solid var(--border); }
+
+  .progress-bar-wrap { width:100%; }
+  .progress-steps { display:flex; gap:4px; width:100%; }
+  .prog-step { flex:1; height:5px; border-radius:4px; background:var(--border); transition:background .3s; }
+  .prog-step.done { background:var(--accent); }
+  .prog-step.active { background:var(--accent); opacity:.5; }
+  .prog-step.is-rest.done { background:var(--rest); }
+  .prog-step.is-rest.active { background:var(--rest); opacity:.5; }
+
+  /* CREATE FORM */
+  .create-panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+  .create-panel-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none; }
+  .create-panel-header h3 { font-size:0.95rem; font-weight:600; }
+  .chevron { transition:transform .2s; font-size:0.8rem; color:var(--muted); }
+  .chevron.open { transform:rotate(180deg); }
+  .create-panel-body { padding:20px; display:flex; flex-direction:column; gap:16px; }
+  .create-panel-body.hidden { display:none; }
+
+  .field label { display:block; font-size:0.78rem; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.8px; }
+  input[type="text"], input[type="number"] { background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px 13px; font-size:0.9rem; outline:none; width:100%; transition:border-color .2s; }
+  input:focus { border-color:var(--accent); }
+
+  .tasks-builder { display:flex; flex-direction:column; gap:8px; }
+  .task-row { display:flex; gap:8px; align-items:center; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
+  .task-row input[type="text"] { flex:1; border:none; background:transparent; padding:4px 6px; }
+  .task-row input[type="text"]:focus { border:none; box-shadow:none; }
+  .task-row .min-input { width:68px; flex-shrink:0; text-align:center; border:1px solid var(--border); background:var(--surface); }
+  .task-row .rest-tag { font-size:0.7rem; color:var(--rest); background:rgba(79,195,161,.12); border-radius:20px; padding:2px 8px; white-space:nowrap; }
+  .task-row .remove-btn { background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; padding:2px 6px; }
+  .task-row .remove-btn:hover { color:var(--accent2); }
+
+  .add-task-btns { display:flex; gap:8px; }
+  .total-preview { font-size:0.85rem; color:var(--muted); padding:10px 14px; background:var(--card); border-radius:8px; display:flex; justify-content:space-between; }
+  .total-preview span { color:var(--accent); font-weight:700; }
+
+  /* EMPTY / COMPLETE */
+  .empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--muted); gap:10px; padding:40px; text-align:center; }
+  .empty-state .icon { font-size:3rem; }
+  .empty-state p { font-size:0.9rem; max-width:280px; line-height:1.6; }
+  .complete-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(79,195,161,.15); color:var(--rest); border-radius:20px; padding:6px 16px; font-size:0.88rem; font-weight:600; }
+
+  @media (max-width:700px) {
+    .sidebar { width:100%; min-width:unset; border-right:none; border-bottom:1px solid var(--border); max-height:240px; }
+    .app { flex-direction:column; }
+    .main { padding:16px; }
+  }
+  /* MODAL CONFIGURACION DE SONIDO */
+  .settings-modal { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:100; backdrop-filter:blur(3px); }
+  .settings-modal.hidden { display:none; }
+  .settings-content { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); width:90%; max-width:350px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.5); }
+  .settings-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+  .settings-header h3 { font-size:0.95rem; font-weight:600; }
+  .close-btn { background:none; border:none; color:var(--muted); font-size:1.1rem; cursor:pointer; }
+  .close-btn:hover { color:var(--accent2); }
+  .settings-body { padding:20px; display:flex; flex-direction:column; gap:16px; }
+  input[type="range"] { width:100%; accent-color:var(--accent); cursor:pointer; }
+  select.custom-select { width:100%; padding:9px 12px; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:8px; outline:none; font-size:0.9rem; }
+  select.custom-select:focus { border-color:var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🍅 Pomo<span>Focus</span></div>
+  <div class="datetime">
+    <div class="time" id="clock">--:--</div>
+    <div class="date" id="dateDisplay"></div>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>Actividades</h2>
+      <div class="export-btns">
+        <button class="btn btn-small btn-md" onclick="exportActivities('md')" title="Exportar como Markdown">⬇ .md</button>
+        <button class="btn btn-small btn-txt" onclick="exportActivities('txt')" title="Exportar como texto plano">⬇ .txt</button>
+        <button class="btn btn-small btn-secondary" onclick="toggleAudioSettings()" title="Configuración de sonido">⚙️</button>
+      </div>
+    </div>
+    <div class="activity-list" id="activityList">
+      <div class="empty-state" id="sidebarEmpty">
+        <div class="icon">📋</div>
+        <p>Aún no hay actividades. Crea una abajo.</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- TIMER PANEL -->
+    <section class="timer-panel" id="timerPanel">
+
+      <div class="empty-state" id="timerEmpty">
+        <div class="icon">⏱️</div>
+        <p>Selecciona una actividad de la lista<br>o crea una nueva para comenzar.</p>
+      </div>
+
+      <!-- FIX #1: eliminado display:none duplicado; ahora oculto solo con id, controlado por JS -->
+      <div id="timerActive" style="display:none; width:100%; flex-direction:column; align-items:center; gap:16px;">
+
+        <div style="text-align:center;">
+          <div class="act-title" id="timerActTitle">—</div>
+          <div class="task-name" id="timerTaskName">—</div>
+        </div>
+
+        <div class="ring-wrap">
+          <svg viewBox="0 0 180 180" width="180" height="180">
+            <circle class="ring-bg" cx="90" cy="90" r="80"/>
+            <circle class="ring-fg" id="ringFg" cx="90" cy="90" r="80"
+              stroke-dasharray="502.65"
+              stroke-dashoffset="0"
+              stroke="var(--accent)"/>
+          </svg>
+          <div class="ring-text">
+            <div class="t-time" id="ringTime">00:00</div>
+            <div class="t-label" id="ringLabel">listo</div>
+          </div>
+        </div>
+
+        <div class="progress-bar-wrap">
+          <div class="progress-steps" id="progressSteps"></div>
+        </div>
+
+        <div class="timer-controls">
+          <button class="btn btn-primary" id="btnPlay" onclick="playPause()">▶ Iniciar</button>
+          <button class="btn btn-secondary" id="btnNext" onclick="nextTask()">Siguiente ›</button>
+          <button class="btn btn-secondary btn-small" onclick="resetTimer()">↺</button>
+        </div>
+
+        <div id="completeBadge" style="display:none;">
+          <div class="complete-badge">✅ Actividad completada</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- CREATE FORM -->
+    <section class="create-panel">
+      <div class="create-panel-header" onclick="toggleForm()">
+        <h3>➕ Nueva actividad</h3>
+        <span class="chevron open" id="chevron">▼</span>
+      </div>
+      <div class="create-panel-body" id="formBody">
+        <div class="field">
+          <label>Nombre de la actividad</label>
+          <input type="text" id="actName" placeholder="Ej: Aseo del cuarto, Estudiar Docker…">
+        </div>
+        <div class="field">
+          <label>Tareas / bloques de tiempo</label>
+          <div class="tasks-builder" id="taskRows"></div>
+          <div class="add-task-btns" style="margin-top:8px;">
+            <button class="btn btn-secondary btn-small" onclick="addTaskRow(false)">+ Tarea</button>
+            <button class="btn btn-small btn-md" onclick="addTaskRow(true)">+ Descanso</button>
+          </div>
+        </div>
+        <div class="total-preview" id="totalPreview">
+          Total estimado: <span>0 min</span>
+        </div>
+        <button class="btn btn-primary" onclick="createActivity()" style="align-self:flex-end;">Crear actividad</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="audioSettingsModal" class="settings-modal hidden">
+  <div class="settings-content">
+    <div class="settings-header">
+      <h3>⚙️ Audio y Alarmas</h3>
+      <button class="close-btn" onclick="toggleAudioSettings()">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="field">
+        <label>Volumen general</label>
+        <input type="range" id="volSlider" min="0" max="1" step="0.1" value="0.8" onchange="updateVolume(this.value)">
+      </div>
+      <div class="field">
+        <label>Tipo de Alarma</label>
+        <select id="soundTypeSel" class="custom-select" onchange="changeSoundType(this.value)">
+          <option value="default">Sonidos por defecto</option>
+          <option value="custom">Sonido personalizado</option>
+        </select>
+      </div>
+      <div class="field" id="customSoundField" style="display:none;">
+        <label>Seleccionar archivo de audio</label>
+        <input type="file" id="audioFileInput" accept="audio/*" onchange="handleFileUpload(event)" style="font-size:0.8rem; padding:4px;">
+        <small style="color:var(--muted); font-size:0.75rem; display:block; margin-top:6px;">El audio se codificará y guardará en tu navegador.</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="editActivityModal" class="settings-modal hidden">
+  <div class="settings-content" style="max-width: 420px;">
+    <div class="settings-header">
+      <h3>✏️ Editar Actividad</h3>
+      <button class="close-btn" onclick="closeEditModal()">✕</button>
+    </div>
+    <div class="settings-body" style="max-height: 75vh; overflow-y: auto;">
+      <input type="hidden" id="editActIndex">
+      <div class="field">
+        <label>Nombre de la actividad</label>
+        <input type="text" id="editActName">
+      </div>
+      <div class="field">
+        <label>Tareas y tiempos</label>
+        <div class="tasks-builder" id="editTaskRows"></div>
+        <div class="add-task-btns" style="margin-top:8px;">
+          <button class="btn btn-secondary btn-small" onclick="addEditTaskRow(false)">+ Tarea</button>
+          <button class="btn btn-small btn-md" onclick="addEditTaskRow(true)">+ Descanso</button>
+        </div>
+      </div>
+      <div class="total-preview">
+        Total recalculado: <span id="editTotalSpan" style="color:var(--accent); font-weight:700;">0 min</span>
+      </div>
+      <button class="btn btn-primary" onclick="saveActivityEdit()" style="margin-top: 4px;">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+// ── SERVICE WORKER REGISTRATION ────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('✅ Service Worker registrado con éxito.', reg.scope))
+      .catch(err => console.warn('⚠️ Error al registrar el Service Worker', err));
+  });
+}
+
+// ── STATE ──────────────────────────────────────────────
+let activities = [];
+let activeIdx  = null;
+let taskIdx    = 0;
+let remaining  = 0;
+let totalSecs  = 0;
+let running    = false;
+let timerID    = null;
+
+// ── AUDIO ENGINE (NIVEL EXPERTO) ───────────────────────
+const AudioEngine = {
+  volume: 0.8,
+  soundType: 'default', // 'default', 'custom'
+  customAudioData: null,
+  isNativeAndroid: false, // Flag preparado para futuro puente nativo (WebView)
+
+  init() {
+    // Recuperar preferencias guardadas en el navegador
+    this.volume = parseFloat(localStorage.getItem('pomo_volume')) || 0.8;
+    this.soundType = localStorage.getItem('pomo_soundType') || 'default';
+    this.customAudioData = localStorage.getItem('pomo_customAudio') || null;
+    
+    // Detección futura para entorno Android (Inyección de interfaz)
+    if (window.AndroidNativeBridge) {
+      this.isNativeAndroid = true;
+    }
+  },
+
+  playAlert(isRest) {
+    if (this.isNativeAndroid) {
+      // Futuro: Llamar a la API nativa de Android
+      // window.AndroidNativeBridge.triggerNativeAlarm(isRest);
+      console.log("📱 [Nativo] Reproduciendo alarma desde SO Android");
+      return;
+    }
+
+    // Entorno actual: Ejecución Web
+    let src = '';
+    if (this.soundType === 'custom' && this.customAudioData) {
+      src = this.customAudioData;
+    } else {
+      // Sonidos por defecto
+      src = isRest 
+        ? 'https://actions.google.com/sounds/v1/water/water_drop.ogg' 
+        : 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg'; 
+    }
+
+    const audio = new Audio(src);
+    audio.volume = this.volume;
+    
+    audio.play().catch(err => {
+      console.warn("El navegador bloqueó el audio automático. Requiere interacción previa.", err);
+    });
+  }
+};
+
+// Inicializar el motor
+AudioEngine.init();
+
+// ── CLOCK ──────────────────────────────────────────────
+const DAYS   = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('clock').textContent = `${h}:${m}`;
+  const day = DAYS[now.getDay()];
+  const mon = MONTHS[now.getMonth()];
+  document.getElementById('dateDisplay').textContent =
+    `${day}, ${now.getDate()} de ${mon} de ${now.getFullYear()}`;
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── FORM TOGGLE ────────────────────────────────────────
+let formOpen = true;
+function toggleForm() {
+  formOpen = !formOpen;
+  document.getElementById('formBody').classList.toggle('hidden', !formOpen);
+  document.getElementById('chevron').classList.toggle('open', formOpen);
+}
+
+// ── TASK ROWS ──────────────────────────────────────────
+let rowCount = 0;
+function addTaskRow(isRest = false) {
+  rowCount++;
+  const id  = 'row_' + rowCount;
+  const div = document.createElement('div');
+  div.className    = 'task-row';
+  div.dataset.id   = id;
+  div.dataset.rest = isRest ? '1' : '0';
+  div.innerHTML = `
+    ${isRest ? '<span class="rest-tag">🌿 Descanso</span>' : ''}
+    <input type="text" placeholder="${isRest ? 'Descanso' : 'Nombre de la tarea'}"
+      value="${isRest ? 'Descanso' : ''}"
+      style="flex:1;border:none;background:transparent;color:var(--text);font-size:.88rem;padding:2px 4px;outline:none;">
+    <input type="number" class="min-input" min="1" max="180" value="${isRest ? 5 : 25}" title="Minutos">
+    <span style="font-size:.7rem;color:var(--muted);flex-shrink:0;">min</span>
+    <button class="remove-btn" onclick="removeRow('${id}')">✕</button>
+  `;
+  document.getElementById('taskRows').appendChild(div);
+  div.querySelector('input[type="number"]').addEventListener('input', updateTotal);
+  updateTotal();
+}
+
+function removeRow(id) {
+  const el = document.querySelector(`[data-id="${id}"]`);
+  if (el) el.remove();
+  updateTotal();
+}
+
+function updateTotal() {
+  let total = 0;
+  document.querySelectorAll('#taskRows .task-row').forEach(row => {
+    total += parseFloat(row.querySelector('input[type="number"]').value) || 0;
+  });
+  document.querySelector('#totalPreview span').textContent = total + ' min';
+}
+
+// ── CREATE ─────────────────────────────────────────────
+function createActivity() {
+  const name = document.getElementById('actName').value.trim();
+  if (!name) { alert('Escribe el nombre de la actividad.'); return; }
+  const rows = document.querySelectorAll('#taskRows .task-row');
+  if (!rows.length) { alert('Agrega al menos una tarea.'); return; }
+
+  const tasks = [];
+  rows.forEach(row => {
+    const label = row.querySelector('input[type="text"]').value.trim() || 'Tarea';
+    const mins  = parseFloat(row.querySelector('input[type="number"]').value) || 1;
+    const rest  = row.dataset.rest === '1';
+    tasks.push({ label, mins, rest });
+  });
+
+  const total = tasks.reduce((s, t) => s + t.mins, 0);
+  activities.push({ id: Date.now(), name, tasks, total });
+  renderSidebar();
+
+  document.getElementById('actName').value = '';
+  document.getElementById('taskRows').innerHTML = '';
+  rowCount = 0;
+  updateTotal();
+
+  loadActivity(activities.length - 1);
+}
+
+// ── SIDEBAR ────────────────────────────────────────────
+function renderSidebar() {
+  const list = document.getElementById('activityList');
+  document.getElementById('sidebarEmpty').style.display = activities.length ? 'none' : 'flex';
+  list.querySelectorAll('.activity-card').forEach(c => c.remove());
+
+  activities.forEach((act, i) => {
+    const card = document.createElement('div');
+    card.className = 'activity-card' + (activeIdx === i ? ' active' : '');
+
+    const tasksHTML = act.tasks.map(t => `
+      <div class="task-pill${t.rest ? ' is-rest' : ''}">
+        <span>${t.rest ? '🌿 ' : ''}${t.label}</span>
+        <span class="pill-min">${t.mins}m</span>
+      </div>`).join('');
+
+    card.innerHTML = `
+      <div class="activity-card-head">
+        <span class="name" onclick="loadActivity(${i})">${act.name}</span>
+        <span class="total">⏱ ${act.total} min</span>
+        <div style="display:flex; gap:4px; flex-shrink:0;">
+          <button class="delete-btn" onclick="openEditModal(${i})" title="Editar actividad">✏️</button>
+          <button class="delete-btn" onclick="deleteActivity(${i})" title="Borrar actividad">🗑</button>
+        </div>
+      </div>
+      <div class="activity-card-tasks" onclick="loadActivity(${i})">${tasksHTML}</div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+// ── LOAD ACTIVITY ──────────────────────────────────────
+function loadActivity(idx) {
+  stopTimer();
+  activeIdx = idx;
+  taskIdx   = 0;
+
+  document.getElementById('timerEmpty').style.display      = 'none';
+  // FIX #1: display correcto al mostrar el panel activo
+  document.getElementById('timerActive').style.display     = 'flex';
+  document.getElementById('completeBadge').style.display   = 'none';
+  document.getElementById('btnPlay').disabled              = false;
+  document.getElementById('btnNext').disabled              = false;
+
+  renderSidebar();
+  loadTask(0);
+}
+
+function loadTask(ti) {
+  const act  = activities[activeIdx];
+  if (!act) return;
+  taskIdx   = ti;
+  const task = act.tasks[ti];
+  remaining  = task.mins * 60;
+  totalSecs  = task.mins * 60;
+  running    = false;
+
+  document.getElementById('timerActTitle').textContent = act.name;
+  document.getElementById('timerTaskName').textContent =
+    `${ti + 1}/${act.tasks.length} · ${task.rest ? '🌿 ' : ''}${task.label}`;
+  // FIX #4: texto del botón siempre consistente al cargar tarea
+  document.getElementById('btnPlay').textContent = '▶ Iniciar';
+  document.getElementById('ringLabel').textContent = task.rest ? 'descanso' : 'listo';
+
+  document.getElementById('ringFg').style.stroke = task.rest ? 'var(--rest)' : 'var(--accent)';
+  updateRing(remaining, totalSecs);
+  // FIX #3: actualizar progreso al cargar cada tarea
+  updateProgressSteps();
+}
+
+// ── TIMER ──────────────────────────────────────────────
+function playPause() {
+  if (activeIdx === null) return;
+  const act = activities[activeIdx];
+  if (taskIdx >= act.tasks.length) return;
+
+  running = !running;
+  document.getElementById('btnPlay').textContent =
+    running ? '⏸ Pausar' : '▶ Reanudar';
+  document.getElementById('ringLabel').textContent = running
+    ? (act.tasks[taskIdx].rest ? 'descanso' : 'enfocado')
+    : 'pausado';
+
+  // FIX #3: reflejar estado activo en la barra de progreso al iniciar/reanudar
+  updateProgressSteps();
+
+  if (running) {
+    timerID = setInterval(tick, 1000);
+  } else {
+    clearInterval(timerID);
+  }
+}
+
+function tick() {
+  remaining--;
+  updateRing(remaining, totalSecs);
+
+  if (remaining <= 0) {
+    clearInterval(timerID);
+    running = false;
+    const act = activities[activeIdx];
+    
+    // NUEVO: Identificar tarea actual y reproducir sonido correspondiente
+    const currentTask = act.tasks[taskIdx];
+    AudioEngine.playAlert(currentTask.rest);
+
+    if (taskIdx + 1 < act.tasks.length) {
+      loadTask(taskIdx + 1);
+      setTimeout(() => playPause(), 600);
+    } else {
+      // FIX #2: estado de completado correcto al terminar la última tarea
+      document.getElementById('ringLabel').textContent = '¡listo!';
+      document.getElementById('btnPlay').textContent   = '▶ Iniciar';
+      document.getElementById('btnPlay').disabled      = true;
+      document.getElementById('btnNext').disabled      = true;
+      document.getElementById('completeBadge').style.display = 'block';
+      updateProgressSteps(true);
+    }
+  }
+}
+
+// FIX #2: nextTask muestra completado si ya no hay más tareas
+function nextTask() {
+  const act = activities[activeIdx];
+  if (!act) return;
+  stopTimer();
+
+  if (taskIdx + 1 < act.tasks.length) {
+    loadTask(taskIdx + 1);
+  } else {
+    // última tarea: marcar como completado
+    document.getElementById('ringLabel').textContent = '¡listo!';
+    document.getElementById('btnPlay').disabled      = true;
+    document.getElementById('btnNext').disabled      = true;
+    document.getElementById('completeBadge').style.display = 'block';
+    updateProgressSteps(true);
+  }
+}
+
+function resetTimer() {
+  stopTimer();
+  if (activeIdx !== null) {
+    document.getElementById('completeBadge').style.display = 'none';
+    document.getElementById('btnPlay').disabled  = false;
+    document.getElementById('btnNext').disabled  = false;
+    loadTask(taskIdx);
+  }
+}
+
+// FIX #4: stopTimer también restaura texto del botón
+function stopTimer() {
+  clearInterval(timerID);
+  running = false;
+  const btn = document.getElementById('btnPlay');
+  if (btn && !btn.disabled) btn.textContent = '▶ Iniciar';
+}
+
+// ── RING ───────────────────────────────────────────────
+const CIRCUM = 2 * Math.PI * 80; // 502.65
+
+function updateRing(rem, tot) {
+  const frac   = tot > 0 ? rem / tot : 1;
+  const offset = CIRCUM * (1 - frac);
+  document.getElementById('ringFg').style.strokeDashoffset = offset;
+  document.getElementById('ringTime').textContent = fmt(rem);
+}
+
+function fmt(s) {
+  const m   = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// ── PROGRESS STEPS ─────────────────────────────────────
+function updateProgressSteps(allDone = false) {
+  const act = activities[activeIdx];
+  if (!act) return;
+  const container = document.getElementById('progressSteps');
+  container.innerHTML = '';
+  act.tasks.forEach((t, i) => {
+    const div = document.createElement('div');
+    div.className = 'prog-step' + (t.rest ? ' is-rest' : '');
+    if      (allDone || i < taskIdx) div.classList.add('done');
+    else if (i === taskIdx)          div.classList.add('active');
+    div.title = `${t.label} · ${t.mins}m`;
+    container.appendChild(div);
+  });
+}
+
+// ── DELETE ─────────────────────────────────────────────
+function deleteActivity(idx) {
+  if (!confirm(`¿Borrar "${activities[idx].name}"?`)) return;
+  stopTimer();
+  activities.splice(idx, 1);
+
+  if (activeIdx === idx) {
+    activeIdx = null;
+    document.getElementById('timerActive').style.display = 'none';
+    document.getElementById('timerEmpty').style.display  = 'flex';
+  } else if (activeIdx !== null && activeIdx > idx) {
+    activeIdx--;
+  }
+  renderSidebar();
+}
+
+// ── EXPORT ─────────────────────────────────────────────
+function exportActivities(format) {
+  if (!activities.length) { alert('No hay actividades para exportar.'); return; }
+
+  const now     = new Date();
+  const dateStr = `${DAYS[now.getDay()]}, ${now.getDate()} de ${MONTHS[now.getMonth()]} de ${now.getFullYear()}`;
+  const hh      = String(now.getHours()).padStart(2,'0');
+  const mm      = String(now.getMinutes()).padStart(2,'0');
+  const fecha   = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+  let content = '';
+  let grandTotal = 0;
+  activities.forEach(a => { grandTotal += a.total; });
+
+  if (format === 'md') {
+    content += `# 📅 Registro del día — ${dateStr}\n`;
+    content += `**Exportado:** ${hh}:${mm}\n\n---\n\n`;
+    activities.forEach((act, i) => {
+      content += `## ${i + 1}. ${act.name}  _(${act.total} min)_\n\n`;
+      act.tasks.forEach(t => {
+        content += `- ${t.rest ? '🌿' : '✅'} **${t.label}** — ${t.mins} min\n`;
+      });
+      content += `\n`;
+    });
+    content += `---\n\n**Total planificado:** ${grandTotal} min (${(grandTotal/60).toFixed(1)} h)\n`;
+  } else {
+    const sep = '─'.repeat(40);
+    content += `REGISTRO DEL DÍA — ${dateStr.toUpperCase()}\n`;
+    content += `Exportado: ${hh}:${mm}\n${sep}\n\n`;
+    activities.forEach((act, i) => {
+      content += `${i + 1}. ${act.name.toUpperCase()}  [${act.total} min]\n`;
+      act.tasks.forEach(t => {
+        content += `   ${t.rest ? '○' : '•'} ${t.label} — ${t.mins} min\n`;
+      });
+      content += `\n`;
+    });
+    content += `${sep}\nTOTAL: ${grandTotal} min (${(grandTotal/60).toFixed(1)} h)\n`;
+  }
+
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `pomofocus-${fecha}.${format}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── EDIT ACTIVITY (NIVEL EXPERTO) ──────────────────────
+function openEditModal(idx) {
+  const act = activities[idx];
+  if (!act) return;
+
+  // Cargar datos básicos
+  document.getElementById('editActIndex').value = idx;
+  document.getElementById('editActName').value = act.name;
+  
+  // Limpiar y cargar filas de tareas
+  const container = document.getElementById('editTaskRows');
+  container.innerHTML = '';
+  
+  act.tasks.forEach(t => {
+    addEditTaskRow(t.rest, t.label, t.mins);
+  });
+  
+  updateEditTotal();
+  document.getElementById('editActivityModal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+  document.getElementById('editActivityModal').classList.add('hidden');
+}
+
+function addEditTaskRow(isRest = false, labelVal = '', minsVal = '') {
+  const div = document.createElement('div');
+  div.className = 'task-row';
+  div.dataset.rest = isRest ? '1' : '0';
+  
+  const defaultLabel = isRest ? 'Descanso' : '';
+  const finalLabel = labelVal || defaultLabel;
+  const finalMins = minsVal || (isRest ? 5 : 25);
+
+  div.innerHTML = `
+    ${isRest ? '<span class="rest-tag">🌿 Descanso</span>' : ''}
+    <input type="text" placeholder="${isRest ? 'Descanso' : 'Nombre de la tarea'}"
+      value="${finalLabel}"
+      style="flex:1;border:none;background:transparent;color:var(--text);font-size:.88rem;padding:2px 4px;outline:none;">
+    <input type="number" class="min-input edit-min-input" min="1" max="180" value="${finalMins}" title="Minutos">
+    <span style="font-size:.7rem;color:var(--muted);flex-shrink:0;">min</span>
+    <button class="remove-btn" onclick="this.parentElement.remove(); updateEditTotal();">✕</button>
+  `;
+  
+  document.getElementById('editTaskRows').appendChild(div);
+  
+  // Escuchar cambios para recalcular el total dinámicamente
+  div.querySelector('.edit-min-input').addEventListener('input', updateEditTotal);
+  updateEditTotal();
+}
+
+function updateEditTotal() {
+  let total = 0;
+  document.querySelectorAll('#editTaskRows .task-row').forEach(row => {
+    total += parseFloat(row.querySelector('.edit-min-input').value) || 0;
+  });
+  document.getElementById('editTotalSpan').textContent = total + ' min';
+}
+
+function saveActivityEdit() {
+  const idx = parseInt(document.getElementById('editActIndex').value);
+  const act = activities[idx];
+  if (!act) return;
+
+  const name = document.getElementById('editActName').value.trim();
+  if (!name) { 
+    alert('El nombre de la actividad no puede estar vacío.'); 
+    return; 
+  }
+
+  const rows = document.querySelectorAll('#editTaskRows .task-row');
+  if (!rows.length) { 
+    alert('La actividad debe tener al menos una tarea.'); 
+    return; 
+  }
+
+  const tasks = [];
+  rows.forEach(row => {
+    const label = row.querySelector('input[type="text"]').value.trim() || 'Tarea';
+    const mins  = parseFloat(row.querySelector('.edit-min-input').value) || 1;
+    const rest  = row.dataset.rest === '1';
+    tasks.push({ label, mins, rest });
+  });
+
+  const total = tasks.reduce((s, t) => s + t.mins, 0);
+
+  // Mutación del objeto original
+  act.name = name;
+  act.tasks = tasks;
+  act.total = total;
+
+  // Actualización de la interfaz
+  renderSidebar();
+  
+  // Si la actividad editada es la que está en curso, recargarla para evitar desincronización
+  if (activeIdx === idx) {
+    // Validación de seguridad por si se eliminó la tarea que estaba activa
+    if (taskIdx >= tasks.length) taskIdx = 0;
+    
+    // Detener temporizador actual y recargar datos frescos
+    stopTimer();
+    loadTask(taskIdx); 
+  }
+
+  closeEditModal();
+}
+
+// ── AUDIO UI CONTROLS ──────────────────────────────────
+function toggleAudioSettings() {
+  const modal = document.getElementById('audioSettingsModal');
+  modal.classList.toggle('hidden');
+  
+  // Sincronizar UI con el estado del motor al abrir
+  if (!modal.classList.contains('hidden')) {
+    document.getElementById('volSlider').value = AudioEngine.volume;
+    document.getElementById('soundTypeSel').value = AudioEngine.soundType;
+    document.getElementById('customSoundField').style.display = AudioEngine.soundType === 'custom' ? 'block' : 'none';
+  }
+}
+
+function updateVolume(val) {
+  AudioEngine.volume = parseFloat(val);
+  localStorage.setItem('pomo_volume', AudioEngine.volume);
+  
+  // Sonido de prueba para ajustar el volumen
+  const testAudio = new Audio('https://actions.google.com/sounds/v1/water/water_drop.ogg');
+  testAudio.volume = AudioEngine.volume;
+  testAudio.play().catch(()=>{});
+}
+
+function changeSoundType(val) {
+  AudioEngine.soundType = val;
+  localStorage.setItem('pomo_soundType', val);
+  document.getElementById('customSoundField').style.display = val === 'custom' ? 'block' : 'none';
+}
+
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Validación de tamaño (Límite de 2MB para proteger el almacenamiento del navegador)
+  const maxSize = 2 * 1024 * 1024; 
+  if (file.size > maxSize) {
+    alert('El archivo es demasiado grande. Por favor, elige un audio menor a 2MB.');
+    event.target.value = ''; // Limpiar el input
+    return;
+  }
+
+  const reader = new FileReader();
+  
+  reader.onload = function(e) {
+    const base64Audio = e.target.result;
+    
+    try {
+      // Guardar en almacenamiento local y actualizar el estado del motor
+      localStorage.setItem('pomo_customAudio', base64Audio);
+      AudioEngine.customAudioData = base64Audio;
+      
+      alert('✅ Sonido personalizado cargado y guardado correctamente.');
+      
+      // Reproducir una prueba del nuevo sonido con el volumen actual
+      const testAudio = new Audio(base64Audio);
+      testAudio.volume = AudioEngine.volume;
+      testAudio.play().catch(err => console.warn("Prueba de audio bloqueada.", err));
+      
+    } catch (error) {
+      console.error("Error al guardar en localStorage", error);
+      alert('Error de almacenamiento. La memoria asignada por el navegador podría estar llena.');
+    }
+  };
+
+  reader.onerror = function() {
+    alert('Ocurrió un error al procesar el archivo de audio.');
+  };
+
+  // Ejecutar la conversión a formato Base64
+  reader.readAsDataURL(file);
+}
+
+// ── DEMO DATA ──────────────────────────────────────────
+(function loadExamples() {
+  activities = [
+    {
+      id: 1,
+      name: 'Aseo del cuarto',
+      tasks: [
+        { label: 'Tender la cama',  mins: 8,  rest: false },
+        { label: 'Ordenar y barrer', mins: 17, rest: false },
+        { label: 'Descanso',         mins: 5,  rest: true  },
+      ],
+      total: 30
+    },
+    {
+      id: 2,
+      name: 'Estudiar Docker',
+      tasks: [
+        { label: 'Estudio',  mins: 50, rest: false },
+        { label: 'Descanso', mins: 10, rest: true  },
+      ],
+      total: 60
+    }
+  ];
+
+  addTaskRow(false);
+  addTaskRow(false);
+  addTaskRow(true);
+
+  const rows = document.querySelectorAll('#taskRows .task-row');
+  if (rows[0]) {
+    rows[0].querySelector('input[type="text"]').value   = 'Tender la cama';
+    rows[0].querySelector('input[type="number"]').value = '8';
+  }
+  if (rows[1]) {
+    rows[1].querySelector('input[type="text"]').value   = 'Ordenar y barrer';
+    rows[1].querySelector('input[type="number"]').value = '17';
+  }
+  document.getElementById('actName').value = 'Aseo del cuarto';
+  updateTotal();
+  renderSidebar();
+})();
+</script>
+</body>
+</html>
