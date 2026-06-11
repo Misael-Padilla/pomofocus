@@ -2,7 +2,7 @@
   "name": "PomoFocus Timer",
   "short_name": "PomoFocus",
   "description": "Aplicación de temporizador Pomodoro y gestión de tiempo",
-  "start_url": "./pomofocus.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0e1117",
   "theme_color": "#f5a623",
